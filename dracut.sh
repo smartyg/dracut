@@ -209,6 +209,7 @@ Creates initial ramdisk images for preloading modules
   --uefi                Create an UEFI executable with the kernel cmdline and
                         kernel combined
   --uefi-stub [FILE]    Use the UEFI stub [FILE] to create an UEFI executable
+  --uboot               Create an U-boot initrd by running 'mkimage'
   --kernel-image [FILE] location of the kernel image
 
 If [LIST] has multiple arguments, then you have to put these in quotes.
@@ -365,6 +366,7 @@ rearrange_params()
         --long loginstall: \
         --long uefi \
         --long uefi-stub: \
+        --long uboot \
         --long kernel-image: \
         --long no-hostonly-i18n \
         --long hostonly-i18n \
@@ -561,6 +563,7 @@ while :; do
         --uefi)        uefi="yes";;
         --uefi-stub)
                        uefi_stub_l="$2";               PARMS_TO_STORE+=" '$2'"; shift;;
+        --uboot)       uboot="yes";;
         --kernel-image)
                        kernel_image_l="$2";            PARMS_TO_STORE+=" '$2'"; shift;;
         --) shift; break;;
@@ -1670,6 +1673,10 @@ fi
 dinfo "*** Creating image file '$outfile' ***"
 
 if [[ $uefi = yes ]]; then
+    if [[ $uboot = yes ]]; then
+        dwarn "Can not create a U-boot UEFI initrd, disabeling U-boot"
+        unset uboot
+    fi
     readonly uefi_outdir="$DRACUT_TMPDIR/uefi"
     mkdir "$uefi_outdir"
 fi
@@ -1757,7 +1764,17 @@ if [[ $uefi = yes ]]; then
         exit 1
     fi
 else
-    if mv "${DRACUT_TMPDIR}/initramfs.img" "$outfile"; then
+    initrd_file="${DRACUT_TMPDIR}/initramfs.img"
+    if [[ $uboot = yes ]]; then
+        if mkimage -A arm -O linux -T ramdisk -C none -n "$(basename $outfile)" -d "${initrd_file}" "${DRACUT_TMPDIR}/uInitramfs.img"; then
+            initrd_file="${DRACUT_TMPDIR}/uInitramfs.img"
+            dinfo "*** initramfs converted to U-boot ready initramfs ***"
+        else
+            dfatal "*** Can not make a U-boot initramfs ***"
+            exit 1
+        fi
+    fi
+    if mv "$initrd_file" "$outfile"; then
         dinfo "*** Creating initramfs image file '$outfile' done ***"
     else
         rm -f -- "$outfile"

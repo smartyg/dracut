@@ -120,7 +120,7 @@ extract_files()
     for f in "${!filenames[@]}"; do
         [[ $nofileinfo ]] || echo "initramfs:/$f"
         [[ $nofileinfo ]] || echo "========================================================================"
-        $CAT $image | cpio --extract --verbose --quiet --to-stdout $f 2>/dev/null
+        $CAT"$image" | $CAT2 | cpio --extract --verbose --quiet --to-stdout $f 2>/dev/null
         ((ret+=$?))
         [[ $nofileinfo ]] || echo "========================================================================"
         [[ $nofileinfo ]] || echo
@@ -130,7 +130,7 @@ extract_files()
 list_modules()
 {
     echo "dracut modules:"
-    $CAT "$image" | cpio --extract --verbose --quiet --to-stdout -- \
+    $CAT"$image" | $CAT2 | cpio --extract --verbose --quiet --to-stdout -- \
         $(dracutlibdirs modules.txt) 2>/dev/null
     ((ret+=$?))
 }
@@ -139,9 +139,9 @@ list_files()
 {
     echo "========================================================================"
     if [ "$sorted" -eq 1 ]; then
-        $CAT "$image" | cpio --extract --verbose --quiet --list | sort -n -k5
+        $CAT"$image" | $CAT2 | cpio --extract --verbose --quiet --list | sort -n -k5
     else
-        $CAT "$image" | cpio --extract --verbose --quiet --list | sort -k9
+        $CAT"$image" | $CAT2 | cpio --extract --verbose --quiet --list | sort -k9
     fi
     ((ret+=$?))
     echo "========================================================================"
@@ -174,10 +174,15 @@ case $bin in
             fi
         fi
         ;;
+    $'\x27\x05\x19\x56'*)
+        PRE_CAT="dd status=none bs=64 skip=1 if="
+        ;;
 esac
 
 if [[ $SKIP ]] ; then
     bin="$($SKIP "$image" | { read -N 6 bin && echo "$bin" ; })"
+elif [[ -n "$PRE_CAT" ]] ; then
+    $PRE_CAT"$image" | read -N 6 bin
 else
     read -N 6 bin < "$image"
 fi
@@ -218,10 +223,18 @@ fi
 
 ret=0
 
+CAT2="cat --"
+if [[ -n "$PRE_CAT" ]] ; then
+    CAT2="$CAT"
+    CAT="$PRE_CAT"
+else
+    CAT="$CAT "
+fi
+
 if (( ${#filenames[@]} > 0 )); then
     extract_files
 else
-    version=$($CAT "$image" | cpio --extract --verbose --quiet --to-stdout -- \
+    version=$($CAT"$image" | $CAT2 | cpio --extract --verbose --quiet --to-stdout -- \
         $(dracutlibdirs 'dracut-*') 2>/dev/null)
     ((ret+=$?))
     echo "Version: $version"
@@ -231,7 +244,7 @@ else
         echo "========================================================================"
     else
         echo -n "Arguments: "
-        $CAT "$image" | cpio --extract --verbose --quiet --to-stdout -- \
+        $CAT"$image" | $CAT2 | cpio --extract --verbose --quiet --to-stdout -- \
             $(dracutlibdirs build-parameter.txt) 2>/dev/null
         echo
         list_modules
